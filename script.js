@@ -1,21 +1,34 @@
 /* =========================================================
    奇美醫院深耕計畫新聞報 — 前端腳本
-   功能：載入 news.json、依週分類、下拉選擇、卡片渲染
+   功能：載入 news.json、依週分類、標籤篩選、卡片渲染
    ========================================================= */
 
 const state = {
   articles: [],
-  weeks: [],            // [{ key, label, start, end, articles: [] }]
+  weeks: [],
   currentWeekKey: null,
-  searchQuery: ''
+  searchQuery: '',
+  selectedTags: [],
+  allTags: new Map()
+};
+
+// 標籤預設清單 - 根據新聞內容自動分類
+const TAG_KEYWORDS = {
+  '醫療科技': ['AI', '人工智慧', '智慧', '機器學習', '科技', '系統', '軟體', '資訊'],
+  '健康促進': ['健康', '預防', '檢查', '篩檢', '養生', '運動', '飲食', '衛生'],
+  '社區服務': ['社區', '義診', '衛教', '講座', '門診', '服務', '宣導', '活動'],
+  '醫學教育': ['醫學', '教育', '研究', '論文', '學術', '訓練', '進修', '發表'],
+  '臨床醫療': ['手術', '治療', '疾病', '患者', '病人', '醫師', '醫護', '臨床'],
+  '醫院動態': ['醫院', '榮譽', '獲獎', '表揚', '新聞', '宣布', '啟用', '開設'],
+  '國際交流': ['國際', '合作', '交流', '簽約', '姊妹', '訪問', '協議', '友誼'],
+  '其他': []
 };
 
 // ------------------- 工具：週次計算 -------------------
-// 以「週一」為一週起始（ISO 週）
 function getWeekStart(date) {
   const d = new Date(date);
-  const day = d.getDay();                  // 0=Sun, 1=Mon, ... 6=Sat
-  const diff = (day === 0 ? -6 : 1 - day); // 移到週一
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1 - day);
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -32,7 +45,7 @@ function formatDate(d, opts = {}) {
 
 function weekKey(date) {
   const start = getWeekStart(date);
-  return formatDate(start).replace(/\//g, '-'); // YYYY-MM-DD of Monday
+  return formatDate(start).replace(/\//g, '-');
 }
 
 function weekLabel(start) {
@@ -42,10 +55,93 @@ function weekLabel(start) {
   return `${y} · ${formatDate(start, { yearless: true })} – ${formatDate(end, { yearless: true })}`;
 }
 
+// ------------------- 標籤分類 -------------------
+function classifyArticle(article) {
+  const text = `${article.title || ''} ${article.summary || ''}`.toLowerCase();
+  const tags = [];
+  
+  for (const [tag, keywords] of Object.entries(TAG_KEYWORDS)) {
+    if (keywords.some(kw => text.includes(kw))) {
+      tags.push(tag);
+    }
+  }
+  
+  return tags.length > 0 ? tags : ['其他'];
+}
+
+function buildTagsMap(articles) {
+  state.allTags.clear();
+  articles.forEach(article => {
+    const tags = classifyArticle(article);
+    tags.forEach(tag => {
+      state.allTags.set(tag, (state.allTags.get(tag) || 0) + 1);
+    });
+  });
+}
+
+// ------------------- 標籤渲染 -------------------
+function renderTags(articles) {
+  buildTagsMap(articles);
+  const container = document.getElementById('tags-container');
+  
+  if (state.allTags.size === 0) {
+    container.innerHTML = '<span class="tag-placeholder">無標籤數據</span>';
+    return;
+  }
+
+  const tagsHtml = Array.from(state.allTags.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([tag, count]) => {
+      const isActive = state.selectedTags.includes(tag);
+      return `
+        <button class="tag ${isActive ? 'active' : ''}" data-tag="${escapeHtml(tag)}">
+          <span>${escapeHtml(tag)}</span>
+          <span class="tag-count">${count}</span>
+        </button>
+      `;
+    })
+    .join('');
+
+  const clearBtn = state.selectedTags.length > 0 
+    ? `<button class="clear-tags">清除標籤</button>`
+    : `<button class="clear-tags hidden">清除標籤</button>`;
+
+  container.innerHTML = tagsHtml + clearBtn;
+
+  document.querySelectorAll('.tag').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      const tag = btn.dataset.tag;
+      toggleTag(tag);
+    });
+  });
+
+  document.querySelector('.clear-tags').addEventListener('click', () => {
+    state.selectedTags = [];
+    renderTags(articles);
+    const week = state.weeks.find(w => w.key === state.currentWeekKey);
+    if (week) applyFilters(week.articles);
+  });
+}
+
+function toggleTag(tag) {
+  const idx = state.selectedTags.indexOf(tag);
+  if (idx > -1) {
+    state.selectedTags.splice(idx, 1);
+  } else {
+    state.selectedTags.push(tag);
+  }
+  
+  const week = state.weeks.find(w => w.key === state.currentWeekKey);
+  if (week) {
+    renderTags(week.articles);
+    applyFilters(week.articles);
+  }
+}
+
 // ------------------- 載入資料 -------------------
 async function loadNews() {
   try {
-    // cache busting：避免 CDN 抓到舊 JSON
     const res = await fetch(`data/news.json?t=${Date.now()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -62,7 +158,7 @@ async function loadNews() {
     groupByWeek();
     renderWeekSelector();
     if (state.weeks.length > 0) {
-      selectWeek(state.weeks[0].key); // 預設最新週
+      selectWeek(state.weeks[0].key);
     } else {
       renderCards([]);
     }
@@ -81,7 +177,8 @@ function groupByWeek() {
     const start = getWeekStart(d);
     const key = formatDate(start).replace(/\//g, '-');
     if (!map.has(key)) {
-      const end = new Date(start); end.setDate(end.getDate() + 6);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
       map.set(key, {
         key, start, end,
         label: weekLabel(start),
@@ -94,7 +191,6 @@ function groupByWeek() {
   state.weeks = Array.from(map.values())
     .sort((a, b) => b.start - a.start);
 
-  // 每週內再依發佈日期新→舊
   state.weeks.forEach(w => {
     w.articles.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
   });
@@ -119,8 +215,12 @@ function renderWeekSelector() {
 // ------------------- 選擇週次 -------------------
 function selectWeek(key) {
   state.currentWeekKey = key;
+  state.selectedTags = [];
   const week = state.weeks.find(w => w.key === key);
-  if (!week) { renderCards([]); return; }
+  if (!week) {
+    renderCards([]);
+    return;
+  }
 
   const summary = document.getElementById('week-summary');
   summary.innerHTML = `
@@ -131,6 +231,7 @@ function selectWeek(key) {
     </span>
   `;
 
+  renderTags(week.articles);
   applyFilters(week.articles);
 }
 
@@ -138,6 +239,7 @@ function selectWeek(key) {
 function applyFilters(baseArticles) {
   const q = state.searchQuery.trim().toLowerCase();
   let list = baseArticles;
+  
   if (q) {
     list = list.filter(a =>
       (a.title || '').toLowerCase().includes(q) ||
@@ -145,6 +247,14 @@ function applyFilters(baseArticles) {
       (a.summary || '').toLowerCase().includes(q)
     );
   }
+
+  if (state.selectedTags.length > 0) {
+    list = list.filter(article => {
+      const tags = classifyArticle(article);
+      return state.selectedTags.some(tag => tags.includes(tag));
+    });
+  }
+
   renderCards(list);
 }
 
@@ -176,14 +286,21 @@ function cardHTML(article, idx) {
   const cover = article.image_url
     ? `<img src="${escapeHtml(article.image_url)}" alt="${title}" loading="lazy"
            onerror="this.parentElement.querySelector('.card-cover-fallback').style.display='grid';this.remove();">
-       <div class="card-cover-fallback variant-${variantNum}" style="display:none;">
-         <span>${shortenTitle(article.title)}</span>
-       </div>
-       <div class="card-cover-logo">奇美 · 深耕計畫</div>`
+        <div class="card-cover-fallback variant-${variantNum}" style="display:none;">
+          <span>${shortenTitle(article.title)}</span>
+        </div>
+        <div class="card-cover-logo">奇美 · 深耕計畫</div>`
     : `<div class="card-cover-fallback variant-${variantNum}">
          <span>${shortenTitle(article.title)}</span>
        </div>
        <div class="card-cover-logo">奇美 · 深耕計畫</div>`;
+
+  const tags = classifyArticle(article);
+  const tagsHtml = `
+    <div class="card-tags">
+      ${tags.map(tag => `<span class="card-tag">${escapeHtml(tag)}</span>`).join('')}
+    </div>
+  `;
 
   return `
     <article class="card">
@@ -195,6 +312,7 @@ function cardHTML(article, idx) {
         </div>
         <h3 class="card-title">${title}</h3>
         <p class="card-summary">${summary}</p>
+        ${tagsHtml}
         <a class="card-cta" href="${encodeURI(url)}" target="_blank" rel="noopener noreferrer">
           點擊前往觀看
         </a>
