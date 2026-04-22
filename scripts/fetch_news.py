@@ -14,6 +14,14 @@ import feedparser
 import requests
 from bs4 import BeautifulSoup
 
+# Google News URL 解碼器（新版 URL 是加密包裝的）
+try:
+    from googlenewsdecoder import gnewsdecoder
+    HAS_DECODER = True
+except ImportError:
+    HAS_DECODER = False
+    print('⚠ googlenewsdecoder 未安裝，Google News URL 可能無法解析')
+
 TPE = timezone(timedelta(hours=8))
 
 # 抓新聞頁面時用的 User-Agent（偽裝成瀏覽器避免被擋）
@@ -174,11 +182,45 @@ def extract_og_image(html, base_url):
     return None
 
 
+def decode_google_news_url(url):
+    """若是 Google News 包裝 URL，解碼成原始新聞 URL"""
+    if 'news.google.com' not in url:
+        return url
+    if not HAS_DECODER:
+        return url
+    try:
+        result = gnewsdecoder(url, interval=1)
+        if result.get('status') and result.get('decoded_url'):
+            return result['decoded_url']
+    except Exception as e:
+        print(f'    ⚠ 解碼 Google News URL 失敗：{str(e)[:80]}')
+    return url
+
+
+def proxy_image(img_url):
+    """用 images.weserv.nl 代理圖片，解決 Referer 擋圖與 CORS"""
+    if not img_url:
+        return None
+    # 去除 protocol（weserv 要求）
+    clean = re.sub(r'^https?://', '', img_url)
+    return f'https://images.weserv.nl/?url={quote(clean, safe="")}&w=800&h=450&fit=cover&a=attention'
+
+
 def resolve_and_get_image(url):
-    """解析 Google News 包裝連結並抓 og:image"""
-    final_url, html = fetch_page(url)
+    """解 Google News 加密 URL → 抓原頁 → 取 og:image → 代理化"""
+    # 步驟 1：解 Google News URL
+    real_url = decode_google_news_url(url)
+    if real_url != url:
+        print(f'        解碼：{real_url[:80]}')
+    # 步驟 2：抓原頁 HTML
+    final_url, html = fetch_page(real_url)
+    # 步驟 3：找 og:image
     img = extract_og_image(html, final_url)
-    return final_url, img
+    if not img:
+        return final_url, None
+    # 步驟 4：透過 weserv 代理包裝，避免 Referer 擋圖
+    proxied = proxy_image(img)
+    return final_url, proxied
 
 
 # -------------------- 抓取流程 --------------------
