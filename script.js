@@ -73,7 +73,9 @@ async function loadNews() {
     renderWeekSelector();
     renderFilterChips();
     if (state.weeks.length > 0) {
-      selectWeek(state.weeks[0].key);
+      // 預設選「最新有新聞的那一週」（若本週為空就自動跳到上週）
+      const firstWithArticles = state.weeks.find(w => w.articles.length > 0);
+      selectWeek((firstWithArticles || state.weeks[0]).key);
     } else {
       renderCards([]);
     }
@@ -164,6 +166,24 @@ function refreshCurrentView() {
 // ------------------- 依週分類 -------------------
 function groupByWeek() {
   const map = new Map();
+
+  // 先把「本週、上週」放進去（即使沒新聞也要出現在下拉選單）
+  const now = new Date();
+  const thisWeekStart = getWeekStart(now);
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+  [thisWeekStart, lastWeekStart].forEach(start => {
+    const key = formatDate(start).replace(/\//g, '-');
+    if (!map.has(key)) {
+      const end = new Date(start); end.setDate(end.getDate() + 6);
+      map.set(key, {
+        key, start: new Date(start), end,
+        label: weekLabel(new Date(start)), articles: []
+      });
+    }
+  });
+
   state.articles.forEach(article => {
     const d = new Date(article.published_at);
     const start = getWeekStart(d);
@@ -189,9 +209,8 @@ function renderWeekSelector() {
     return;
   }
 
-  sel.innerHTML = state.weeks.map((w, i) => {
-    const prefix = i === 0 ? '本週' : (i === 1 ? '上週' : `${i + 1} 週前`);
-    return `<option value="${w.key}">${prefix}｜${w.label}（${w.articles.length} 則）</option>`;
+  sel.innerHTML = state.weeks.map(w => {
+    return `<option value="${w.key}">${w.label}（${w.articles.length} 則）</option>`;
   }).join('');
 
   sel.addEventListener('change', e => selectWeek(e.target.value));
@@ -208,7 +227,7 @@ function selectWeek(key) {
     <strong>${week.label}</strong>
     <span class="badge">${week.articles.length} 則新聞</span>
     <span style="color: var(--text-muted); font-size: 13px;">
-      
+      （由新到舊排列，點擊卡片前往原始來源）
     </span>
   `;
 
