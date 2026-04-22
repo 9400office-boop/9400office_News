@@ -227,7 +227,7 @@ function selectWeek(key) {
     <strong>${week.label}</strong>
     <span class="badge">${week.articles.length} 則新聞</span>
     <span style="color: var(--text-muted); font-size: 13px;">
-      （由新到舊排列，點擊卡片前往原始來源）
+      
     </span>
   `;
 
