@@ -1,6 +1,6 @@
 #\!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""奇美醫院深耕計畫新聞抓取 — 含自動標籤（4 範疇 + 11 類別）"""
+"""奇美醫院深耕計畫新聞抓取 — 含自動標籤（4 範疇 ）"""
 import json
 import hashlib
 import re
