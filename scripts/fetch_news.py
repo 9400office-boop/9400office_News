@@ -1,19 +1,31 @@
-#\!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""奇美醫院深耕計畫新聞抓取 — 含自動標籤（4 範疇 ）"""
+"""奇美醫院深耕計畫新聞抓取 — 含自動標籤（4 範疇）+ og:image 自動抓取"""
 import json
 import hashlib
 import re
 import sys
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
 
 import feedparser
 import requests
 from bs4 import BeautifulSoup
 
 TPE = timezone(timedelta(hours=8))
+
+# 抓新聞頁面時用的 User-Agent（偽裝成瀏覽器避免被擋）
+UA = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+      'AppleWebKit/537.36 (KHTML, like Gecko) '
+      'Chrome/122.0.0.0 Safari/537.36')
+FETCH_HEADERS = {
+    'User-Agent': UA,
+    'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+}
+FETCH_TIMEOUT = 12
 
 KEYWORD_QUERIES = [
     '奇美醫院 深耕計畫',
@@ -111,13 +123,65 @@ def match_tags(text, rules):
 
 def auto_tag(title, summary, manual_keywords=None):
     # 只匹配標題，避免 summary 裡順便提到的關鍵字被誤標
-    # 例如企業捐款新聞在 summary 順便提了「智慧醫療」，不應被標為「導入智慧科技醫療」
     text = title or ''
     return {
         'scope': match_tags(text, SCOPE_RULES),
     }
 
 
+# -------------------- og:image 抓取 --------------------
+def fetch_page(url):
+    """對 URL 做 GET，follow 重導向，回傳 (final_url, html)"""
+    try:
+        r = requests.get(url, headers=FETCH_HEADERS, timeout=FETCH_TIMEOUT,
+                         allow_redirects=True)
+        if r.status_code == 200:
+            return r.url, r.text
+        print(f'    ⚠ HTTP {r.status_code} for {url[:60]}')
+    except requests.exceptions.RequestException as e:
+        print(f'    ⚠ fetch 失敗：{type(e).__name__}: {str(e)[:80]}')
+    return url, None
+
+
+def extract_og_image(html, base_url):
+    """從 HTML 抓 og:image / twitter:image meta 標籤"""
+    if not html:
+        return None
+    try:
+        soup = BeautifulSoup(html, 'html.parser')
+    except Exception:
+        return None
+
+    # 嘗試多個 meta 標籤，優先順序
+    candidates = [
+        {'property': 'og:image'},
+        {'property': 'og:image:url'},
+        {'property': 'og:image:secure_url'},
+        {'name': 'twitter:image'},
+        {'property': 'twitter:image'},
+        {'name': 'twitter:image:src'},
+    ]
+    for attrs in candidates:
+        tag = soup.find('meta', attrs=attrs)
+        if tag and tag.get('content'):
+            img = tag['content'].strip()
+            if img.startswith('//'):
+                img = 'https:' + img
+            elif img.startswith('/'):
+                img = urljoin(base_url, img)
+            if img.startswith('http'):
+                return img
+    return None
+
+
+def resolve_and_get_image(url):
+    """解析 Google News 包裝連結並抓 og:image"""
+    final_url, html = fetch_page(url)
+    img = extract_og_image(html, final_url)
+    return final_url, img
+
+
+# -------------------- 抓取流程 --------------------
 def fetch_all():
     seen = {}
     for q in KEYWORD_QUERIES:
@@ -168,6 +232,30 @@ def ensure_tags(article):
     return article
 
 
+def backfill_images(articles):
+    """對尚未有 image_url 的文章，去原始新聞頁面抓 og:image"""
+    need = [a for a in articles if not a.get('image_url')]
+    if not need:
+        print('    所有文章都已有圖片，無需補抓')
+        return 0
+    print(f'    需要補抓圖片：{len(need)} 則')
+    ok = 0
+    for i, a in enumerate(need, 1):
+        print(f'    [{i}/{len(need)}] {a["title"][:40]}')
+        final_url, img = resolve_and_get_image(a['url'])
+        if final_url and final_url != a['url']:
+            a['final_url'] = final_url
+        if img:
+            a['image_url'] = img
+            print(f'        OK {img[:90]}')
+            ok += 1
+        else:
+            print(f'        X 找不到 og:image（保持漸層 fallback）')
+        time.sleep(0.6)
+    print(f'    圖片補齊：{ok}/{len(need)}')
+    return ok
+
+
 def merge(existing, new_items):
     existing_articles = [ensure_tags(a) for a in existing.get('articles', [])]
     by_id = {a['id']: a for a in existing_articles}
@@ -179,31 +267,32 @@ def merge(existing, new_items):
         elif not by_id[item['id']].get('tags'):
             by_id[item['id']]['tags'] = item['tags']
     merged = sorted(by_id.values(), key=lambda a: a.get('published_at', ''), reverse=True)
-    return {
-        'updated_at': datetime.now(TPE).isoformat(timespec='seconds'),
-        'description': '奇美醫院深耕計畫新聞自動收錄。每日 08:00 與 22:00（台北時間）由 GitHub Actions 自動更新。',
-        'taxonomy': {
-            'scope': list(SCOPE_RULES.keys()),
-        },
-        'articles': merged,
-        '_stats': {'total': len(merged), 'added_this_run': added},
-    }
+    return merged, added
 
 
 def main():
     print(f'\n=== 奇美深耕新聞抓取 @ {datetime.now(TPE).isoformat()} ===')
-    print('\n[1/3] 從 Google News 抓取新聞…')
+    print('\n[1/4] 從 Google News 抓取新聞…')
     fetched = fetch_all()
     print(f'    抓到 {len(fetched)} 則符合條件的新聞')
 
-    print('\n[2/3] 合併並回填標籤…')
-    merged = merge(load_existing(), fetched)
+    print('\n[2/4] 合併並回填標籤…')
+    merged, added = merge(load_existing(), fetched)
 
-    print('\n[3/3] 寫回 data/news.json…')
+    print('\n[3/4] 抓取新聞照片（og:image）…')
+    img_ok = backfill_images(merged)
+
+    print('\n[4/4] 寫回 data/news.json…')
     DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    output = {
+        'updated_at': datetime.now(TPE).isoformat(timespec='seconds'),
+        'description': '奇美醫院深耕計畫新聞自動收錄。每日 08:00 與 22:00（台北時間）由 GitHub Actions 自動更新。',
+        'taxonomy': {'scope': list(SCOPE_RULES.keys())},
+        'articles': merged,
+    }
     with DATA_PATH.open('w', encoding='utf-8') as f:
-        json.dump(merged, f, ensure_ascii=False, indent=2)
-    print(f'\n✓ 完成：{stats.get("total", 0)} 則，新增 {stats.get("added_this_run", 0)} 則')
+        json.dump(output, f, ensure_ascii=False, indent=2)
+    print(f'\n完成：{len(merged)} 則，新增 {added} 則，補齊圖片 {img_ok} 則')
     return 0
 
 
