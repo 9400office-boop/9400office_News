@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="奇美醫院深耕計畫新聞報 — 健康台灣 深耕台南">
+  <title>奇美醫院深耕計畫新聞報</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-mark">奇</div>
+        <div class="brand-text">
+          <h1>奇美醫院深耕計畫新聞報</h1>
+          <p class="subtitle">健康台灣 · 深耕台南 · 智慧醫療 · 全人照護 · 無牆醫院</p>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="meta-item" id="last-updated">最後更新：載入中…</div>
+        <div class="meta-item" id="article-count">新聞數：—</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="controls">
+      <label for="week-select" class="control-label">選擇週次</label>
+      <select id="week-select" aria-label="選擇週次">
+        <option value="">載入中…</option>
+      </select>
+      <div class="controls-right">
+        <input type="search" id="search-input" placeholder="搜尋標題 / 來源…" aria-label="搜尋">
+      </div>
+    </section>
+
+    <section id="week-summary" class="week-summary"></section>
+
+    <section id="cards" class="cards-grid" aria-live="polite">
+      <div class="loading">載入新聞中…</div>
+    </section>
+
+    <section id="empty-state" class="empty-state hidden">
+      <div class="empty-icon">📰</div>
+      <h2>本週尚未收錄新聞</h2>
+      <p>每日 08:00 與 22:00（台北時間）自動更新。請選擇其他週次查看。</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>資料來源：Google News 自動彙整 · 由 GitHub Actions 排程更新</p>
+    <p class="footer-note">本站僅收錄公開新聞標題與摘要，點擊卡片連至原始來源閱讀全文。</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
