@@ -1,22 +1,6 @@
-#!/usr/bin/env python3
+#\!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-奇美醫院深耕計畫新聞抓取腳本
------------------------------------
-資料來源：Google News RSS（免費、穩定、不需 API key）
-排程：GitHub Actions，每日 00:00 UTC / 14:00 UTC
-     （= 台北 08:00 / 22:00）
-
-每次執行流程：
-1. 以多組關鍵字查 Google News RSS
-2. 解析 RSS → 結構化 article
-3. 雜訊過濾（股市/徵才/無關）
-4. 與現有 data/news.json 去重合併
-5. 寫回 data/news.json
-
-依賴：feedparser, beautifulsoup4, requests
-"""
-
+"""奇美醫院深耕計畫新聞抓取 — 含自動標籤（4 範疇 + 11 類別）"""
 import json
 import hashlib
 import re
@@ -29,12 +13,8 @@ import feedparser
 import requests
 from bs4 import BeautifulSoup
 
-# ------------------- 設定 -------------------
-
-# 台北時區
 TPE = timezone(timedelta(hours=8))
 
-# Google News RSS 查詢語法：以台灣中文為主
 KEYWORD_QUERIES = [
     '奇美醫院 深耕計畫',
     '奇美醫院深耕計畫',
@@ -44,90 +24,91 @@ KEYWORD_QUERIES = [
     '奇美醫療 深耕',
 ]
 
-# 若新聞同時不包含這些字詞就過濾掉（正向門檻）
 REQUIRED_ANY = ['奇美']
+NEGATIVE_TERMS = ['股價', '股東', '證券', '股票', '漲停', '跌停',
+                  '徵才', '求才', '職缺', '求職', '人力銀行', 'IPO']
 
-# 命中這些字就丟掉（負向過濾 — 徵才 / 股票 / 無關）
-NEGATIVE_TERMS = [
-    '股價', '股東', '證券', '股票', '漲停', '跌停',
-    '徵才', '求才', '職缺', '求職', '人力銀行',
-    '股價表現', 'IPO',
-]
+# --- 4 大範疇 ---
+SCOPE_RULES = {
+    '優化醫療工作條件': ['醫事人員', '工作條件', '護病比', '調薪', '薪資',
+                          '勞動', '加班', '過勞', '人力短缺', '待遇', '退休金', '招募'],
+    '規劃多元人才培訓': ['培訓', '訓練', '研討會', '講座', '課程', '實習',
+                          '進修', '國際交流', '聯盟共訓', '學術交流', '跨領域',
+                          '聯合授課', '教學'],
+    '導入智慧科技醫療': ['AI', '人工智慧', '智慧醫療', '智能', '機器人', '演算法',
+                          '數位', '大數據', 'AIoT', '遠距醫療', '遠距',
+                          '數位轉型', 'A+助理'],
+    '社會責任醫療永續': ['ESG', '永續', '淨零', '碳排', '減碳', '綠色', '偏鄉',
+                          '無牆', '深耕', '捐助', '公益', '環境', '社會責任',
+                          '健康促進', '在地', '社區', 'SDGs'],
+}
+
+# --- 11 大類別 ---
+CATEGORY_RULES = {
+    '智慧醫療': ['AI', '人工智慧', '智慧醫療', '智能', '機器人', '演算法',
+                  '大數據', 'AIoT', 'A+助理', '模型', '生成式'],
+    '兒童精神醫療／心理健康': ['兒少心理', '青少年心理', '心理健康', '精神醫療',
+                                 '憂鬱', '自殺防治', '情緒', '心理諮商'],
+    '新興傳染病': ['傳染病', 'COVID', '新冠', '流感', '疫情', '疫苗',
+                    '病毒', '感染管控', '院內感染', '流行病'],
+    '優化醫療、健保永續': ['健保', '醫保', '分級醫療', '醫療永續', '點值', 'ISO 7101'],
+    '三高防治（糖尿病共同照護網）': ['糖尿病', '共同照護網', 'DCC', '糖友'],
+    '三高防治888計畫': ['三高', '高血壓', '高血脂', '888'],
+    '婦女醫療': ['婦女', '婦科', '孕產', '更年期', '女性健康', '產後', '母嬰'],
+    '兒童健康': ['兒童健康', '兒科', '嬰幼兒', '幼兒', '疫苗接種', '兒童發展'],
+    '優化營養、全齡健康': ['營養', '飲食', '高齡', '長者', '銀髮', '長照',
+                             '在宅', '在宅急症照護', '慢性病整合'],
+    '社區營造': ['社區', '鄰里', '在地', '深耕台南', '偏鄉', '社區健康', '社區營造'],
+    '全民運動健康促進': ['運動', '健身', '體適能', '健康促進', '身體活動'],
+}
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_PATH = ROOT / 'data' / 'news.json'
 
 
-# ------------------- 工具 -------------------
-
-def google_news_rss_url(query: str, hl='zh-TW', gl='TW', ceid='TW:zh-Hant') -> str:
-    return (
-        f'https://news.google.com/rss/search?q={quote(query)}'
-        f'&hl={hl}&gl={gl}&ceid={ceid}'
-    )
+def google_news_rss_url(query, hl='zh-TW', gl='TW', ceid='TW:zh-Hant'):
+    return f'https://news.google.com/rss/search?q={quote(query)}&hl={hl}&gl={gl}&ceid={ceid}'
 
 
-def article_id(url: str, title: str) -> str:
-    """根據 url+title 做穩定 hash，避免重複收錄"""
+def article_id(url, title):
     base = (url or '') + '|' + (title or '')
     return hashlib.md5(base.encode('utf-8')).hexdigest()[:16]
 
 
-def clean_title(title: str) -> str:
-    """Google News 標題常帶 ' - 來源名' 後綴，移掉"""
+def clean_title(title):
     if not title:
         return ''
-    # 移除結尾的 " - xxx"（視為來源名，會在另一個欄位回填）
     parts = re.split(r'\s[-–—]\s', title)
-    if len(parts) > 1:
-        return parts[0].strip()
-    return title.strip()
+    return parts[0].strip() if len(parts) > 1 else title.strip()
 
 
-def extract_source(entry) -> str:
-    # feedparser 把 Google News 的 source 放在 entry.source.title
+def extract_source(entry):
     try:
         if 'source' in entry and entry.source and entry.source.get('title'):
             return entry.source.title
     except Exception:
         pass
-    # 備援：從標題尾巴抓
-    title = entry.get('title', '')
-    m = re.search(r'[-–—]\s*([^-–—]+)$', title)
-    if m:
-        return m.group(1).strip()
-    return '未知來源'
+    m = re.search(r'[-–—]\s*([^-–—]+)$', entry.get('title', ''))
+    return m.group(1).strip() if m else '未知來源'
 
 
-def parse_pub_date(entry) -> str | None:
-    """回傳 YYYY-MM-DD（台北時間）"""
+def parse_pub_date(entry):
     if entry.get('published_parsed'):
         dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-        dt_tpe = dt.astimezone(TPE)
-        return dt_tpe.strftime('%Y-%m-%d')
-    if entry.get('published'):
-        try:
-            dt = datetime.strptime(entry.published, '%a, %d %b %Y %H:%M:%S %Z')
-            return dt.astimezone(TPE).strftime('%Y-%m-%d')
-        except Exception:
-            pass
+        return dt.astimezone(TPE).strftime('%Y-%m-%d')
     return None
 
 
-def extract_summary(entry) -> str:
-    """從 RSS summary 抽 120 字左右摘要。Google News 的 summary 是 HTML 片段。"""
+def extract_summary(entry):
     raw = entry.get('summary', '') or entry.get('description', '')
     if not raw:
         return ''
-    soup = BeautifulSoup(raw, 'html.parser')
-    text = soup.get_text(' ', strip=True)
-    # 清理多餘空白
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text[:160]
+    text = BeautifulSoup(raw, 'html.parser').get_text(' ', strip=True)
+    return re.sub(r'\s+', ' ', text).strip()[:160]
 
 
-def passes_filters(title: str, summary: str) -> bool:
-    blob = (title + ' ' + summary)
+def passes_filters(title, summary):
+    blob = title + ' ' + summary
     if not any(tok in blob for tok in REQUIRED_ANY):
         return False
     if any(neg in blob for neg in NEGATIVE_TERMS):
@@ -135,105 +116,116 @@ def passes_filters(title: str, summary: str) -> bool:
     return True
 
 
-# ------------------- 主流程 -------------------
+def match_tags(text, rules):
+    blob = text.lower()
+    hit = []
+    for tag, kws in rules.items():
+        for kw in kws:
+            if kw.lower() in blob:
+                hit.append(tag)
+                break
+    return hit
 
-def fetch_all() -> list[dict]:
-    """查所有關鍵字，回傳去重後的新聞清單"""
+
+def auto_tag(title, summary, manual_keywords=None):
+    pieces = [title or '', summary or '']
+    if manual_keywords:
+        pieces.append(' '.join(manual_keywords))
+    text = ' '.join(pieces)
+    return {
+        'scope': match_tags(text, SCOPE_RULES),
+        'category': match_tags(text, CATEGORY_RULES),
+    }
+
+
+def fetch_all():
     seen = {}
     for q in KEYWORD_QUERIES:
-        url = google_news_rss_url(q)
         print(f'  → 查詢：{q}')
         try:
-            feed = feedparser.parse(url)
+            feed = feedparser.parse(google_news_rss_url(q))
         except Exception as e:
             print(f'    ✗ 失敗：{e}')
             continue
 
         for entry in feed.entries:
-            title_raw = entry.get('title', '')
-            title = clean_title(title_raw)
+            title = clean_title(entry.get('title', ''))
             link = entry.get('link', '')
             if not title or not link:
                 continue
-
             summary = extract_summary(entry)
-
             if not passes_filters(title, summary):
                 continue
-
             aid = article_id(link, title)
             if aid in seen:
                 continue
-
             seen[aid] = {
-                'id': aid,
-                'title': title,
-                'source': extract_source(entry),
+                'id': aid, 'title': title, 'source': extract_source(entry),
                 'url': link,
                 'published_at': parse_pub_date(entry) or datetime.now(TPE).strftime('%Y-%m-%d'),
-                'summary': summary,
-                'image_url': None,
-                'keywords': [q],
+                'summary': summary, 'image_url': None, 'keywords': [q],
+                'tags': auto_tag(title, summary, manual_keywords=[q]),
                 'fetched_at': datetime.now(TPE).isoformat(timespec='seconds'),
             }
-
     return list(seen.values())
 
 
-def load_existing() -> dict:
+def load_existing():
     if DATA_PATH.exists():
         try:
-            with DATA_PATH.open('r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f'  ✗ 讀取現有 news.json 失敗：{e}，將重建')
+            return json.load(DATA_PATH.open(encoding='utf-8'))
+        except Exception:
+            pass
     return {'updated_at': '', 'articles': []}
 
 
-def merge(existing: dict, new_items: list[dict]) -> dict:
-    existing_articles = existing.get('articles', [])
-    by_id = {a['id']: a for a in existing_articles}
+def ensure_tags(article):
+    if 'tags' not in article or not isinstance(article.get('tags'), dict):
+        article['tags'] = auto_tag(
+            article.get('title', ''), article.get('summary', ''),
+            manual_keywords=article.get('keywords') or []
+        )
+    return article
 
+
+def merge(existing, new_items):
+    existing_articles = [ensure_tags(a) for a in existing.get('articles', [])]
+    by_id = {a['id']: a for a in existing_articles}
     added = 0
     for item in new_items:
         if item['id'] not in by_id:
             by_id[item['id']] = item
             added += 1
-
-    merged = list(by_id.values())
-    # 依日期新→舊
-    merged.sort(key=lambda a: a.get('published_at', ''), reverse=True)
-
+        elif not by_id[item['id']].get('tags'):
+            by_id[item['id']]['tags'] = item['tags']
+    merged = sorted(by_id.values(), key=lambda a: a.get('published_at', ''), reverse=True)
     return {
         'updated_at': datetime.now(TPE).isoformat(timespec='seconds'),
         'description': '奇美醫院深耕計畫新聞自動收錄。每日 08:00 與 22:00（台北時間）由 GitHub Actions 自動更新。',
+        'taxonomy': {
+            'scope': list(SCOPE_RULES.keys()),
+            'category': list(CATEGORY_RULES.keys()),
+        },
         'articles': merged,
-        '_stats': {
-            'total': len(merged),
-            'added_this_run': added,
-        }
+        '_stats': {'total': len(merged), 'added_this_run': added},
     }
 
 
 def main():
     print(f'\n=== 奇美深耕新聞抓取 @ {datetime.now(TPE).isoformat()} ===')
-
     print('\n[1/3] 從 Google News 抓取新聞…')
     fetched = fetch_all()
     print(f'    抓到 {len(fetched)} 則符合條件的新聞')
 
-    print('\n[2/3] 與現有資料合併去重…')
-    existing = load_existing()
-    merged = merge(existing, fetched)
+    print('\n[2/3] 合併並回填標籤…')
+    merged = merge(load_existing(), fetched)
 
     print('\n[3/3] 寫回 data/news.json…')
     DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    # 去掉 _stats 前先取出，避免寫進檔案（也可保留，但前端不用）
     stats = merged.pop('_stats', {})
     with DATA_PATH.open('w', encoding='utf-8') as f:
         json.dump(merged, f, ensure_ascii=False, indent=2)
-
-    print(f'\n✓ 完成：總共 {stats.get("total", 0)} 則，本次新增 {stats.get("added_this_run", 0)} 則')
+    print(f'\n✓ 完成：{stats.get("total", 0)} 則，新增 {stats.get("added_this_run", 0)} 則')
     return 0
 
 

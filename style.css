@@ -25,7 +25,6 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-
 html { scroll-behavior: smooth; }
 
 body {
@@ -72,8 +71,7 @@ body {
 .brand { display: flex; align-items: center; gap: 18px; }
 
 .brand-mark {
-  width: 60px;
-  height: 60px;
+  width: 60px; height: 60px;
   background: var(--accent);
   color: #fff;
   border-radius: 14px;
@@ -181,110 +179,165 @@ body {
   border-color: var(--primary);
 }
 
-/* ---------- Tags Section ---------- */
-.tags-section {
+/* ---------- Filter panel ---------- */
+.filter-panel {
   background: var(--surface);
-  padding: 18px 22px;
+  padding: 16px 20px;
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.tags-label {
+.filter-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.filter-row-label {
+  flex-shrink: 0;
   font-weight: 700;
   color: var(--primary);
-  font-size: 14px;
+  font-size: 13px;
   letter-spacing: 0.5px;
-  margin-bottom: 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  padding: 7px 0;
+  min-width: 84px;
 }
 
-.tags-label::before {
-  content: "🏷️";
-  font-size: 16px;
-}
-
-.tags-container {
+.chip-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
+  gap: 8px;
+  flex: 1;
 }
 
-.tag {
+.chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 999px;
+  gap: 4px;
+  padding: 6px 12px;
   font-size: 13px;
-  font-weight: 500;
-  background: #f0f4f8;
-  color: var(--text-soft);
+  font-family: inherit;
+  border-radius: 999px;
   border: 1.5px solid var(--border);
+  background: #fff;
+  color: var(--text-soft);
   cursor: pointer;
-  transition: all .2s ease;
-  white-space: nowrap;
+  transition: all .18s ease;
   user-select: none;
+  white-space: nowrap;
 }
 
-.tag:hover {
-  background: var(--primary-light);
+.chip:hover {
   border-color: var(--primary);
-  color: var(--primary-dark);
-  transform: translateY(-2px);
+  color: var(--primary);
+  background: var(--primary-light);
 }
 
-.tag.active {
+.chip.active {
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(10, 79, 138, 0.25);
-}
-
-.tag-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.tag.active .tag-count {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.tag-placeholder {
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.clear-tags {
-  margin-left: auto;
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 13px;
   font-weight: 600;
-  background: var(--warm);
+}
+
+.chip.active:hover {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+.chip .chip-count {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+.chip.active .chip-count { opacity: 0.9; }
+
+.chip[data-axis="category"] {
+  border-color: #d9ebe9;
+  color: var(--accent-dark);
+}
+
+.chip[data-axis="category"]:hover {
+  background: #e6f5f3;
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.chip[data-axis="category"].active {
+  background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
-  border: none;
-  cursor: pointer;
-  transition: background .2s;
 }
 
-.clear-tags:hover {
-  background: #e0931e;
+.chip[data-axis="category"].active:hover {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
 }
 
-.clear-tags.hidden {
-  display: none;
+.filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 2px;
+  border-top: 1px dashed var(--border);
+  flex-wrap: wrap;
+}
+
+.filter-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.filter-hint.active { color: var(--primary); font-weight: 600; }
+
+.chip-clear {
+  font-size: 12px;
+  padding: 5px 12px;
+  border-color: var(--border);
+  background: #f3f4f6;
+  color: var(--text-muted);
+}
+
+.chip-clear:hover {
+  background: #fde2e2;
+  border-color: #e4a5a5;
+  color: #b52a2a;
+}
+
+/* ---------- Card tag chips ---------- */
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.card-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 999px;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+}
+
+.card-tag.scope {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.card-tag.category {
+  background: #e6f5f3;
+  color: var(--accent-dark);
 }
 
 /* ---------- Week summary ---------- */
@@ -441,27 +494,6 @@ body {
   overflow: hidden;
 }
 
-/* 卡片內的標籤 */
-.card-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0;
-  padding: 10px 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-.card-tag {
-  display: inline-block;
-  padding: 4px 10px;
-  background: var(--primary-light);
-  color: var(--primary-dark);
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
 .card-cta {
   display: inline-flex;
   align-items: center;
@@ -538,10 +570,10 @@ body {
   .controls { flex-direction: column; align-items: stretch; }
   .controls-right { margin-left: 0; width: 100%; }
   #search-input { width: 100%; }
-  .tags-section { padding: 14px 16px; }
-  .tags-container { gap: 8px; }
-  .tag { padding: 6px 12px; font-size: 12px; }
   .cards-grid { grid-template-columns: 1fr; gap: 16px; }
   .brand-text h1 { font-size: 20px; }
   .subtitle { font-size: 11px; letter-spacing: 1px; }
+  .filter-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .filter-row-label { padding: 0; min-width: auto; }
+  .filter-actions { justify-content: flex-start; }
 }
