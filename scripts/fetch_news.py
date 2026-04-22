@@ -28,38 +28,20 @@ REQUIRED_ANY = ['奇美']
 NEGATIVE_TERMS = ['股價', '股東', '證券', '股票', '漲停', '跌停',
                   '徵才', '求才', '職缺', '求職', '人力銀行', 'IPO']
 
-# --- 4 大範疇 ---
+# --- 4 大範疇（健康臺灣深耕計畫） ---
 SCOPE_RULES = {
     '優化醫療工作條件': ['醫事人員', '工作條件', '護病比', '調薪', '薪資',
-                          '勞動', '加班', '過勞', '人力短缺', '待遇', '退休金', '招募'],
+                          '勞動', '加班', '過勞', '人力短缺', '待遇', '退休金',
+                          '招募', '尊嚴', '醫護'],
     '規劃多元人才培訓': ['培訓', '訓練', '研討會', '講座', '課程', '實習',
                           '進修', '國際交流', '聯盟共訓', '學術交流', '跨領域',
-                          '聯合授課', '教學'],
+                          '聯合授課', '教學', '人才培育', '師資'],
     '導入智慧科技醫療': ['AI', '人工智慧', '智慧醫療', '智能', '機器人', '演算法',
                           '數位', '大數據', 'AIoT', '遠距醫療', '遠距',
-                          '數位轉型', 'A+助理'],
+                          '數位轉型', 'A+助理', '科技醫療', '雲端'],
     '社會責任醫療永續': ['ESG', '永續', '淨零', '碳排', '減碳', '綠色', '偏鄉',
                           '無牆', '深耕', '捐助', '公益', '環境', '社會責任',
-                          '健康促進', '在地', '社區', 'SDGs'],
-}
-
-# --- 11 大類別 ---
-CATEGORY_RULES = {
-    '智慧醫療': ['AI', '人工智慧', '智慧醫療', '智能', '機器人', '演算法',
-                  '大數據', 'AIoT', 'A+助理', '模型', '生成式'],
-    '兒童精神醫療／心理健康': ['兒少心理', '青少年心理', '心理健康', '精神醫療',
-                                 '憂鬱', '自殺防治', '情緒', '心理諮商'],
-    '新興傳染病': ['傳染病', 'COVID', '新冠', '流感', '疫情', '疫苗',
-                    '病毒', '感染管控', '院內感染', '流行病'],
-    '優化醫療、健保永續': ['健保', '醫保', '分級醫療', '醫療永續', '點值', 'ISO 7101'],
-    '三高防治（糖尿病共同照護網）': ['糖尿病', '共同照護網', 'DCC', '糖友'],
-    '三高防治888計畫': ['三高', '高血壓', '高血脂', '888'],
-    '婦女醫療': ['婦女', '婦科', '孕產', '更年期', '女性健康', '產後', '母嬰'],
-    '兒童健康': ['兒童健康', '兒科', '嬰幼兒', '幼兒', '疫苗接種', '兒童發展'],
-    '優化營養、全齡健康': ['營養', '飲食', '高齡', '長者', '銀髮', '長照',
-                             '在宅', '在宅急症照護', '慢性病整合'],
-    '社區營造': ['社區', '鄰里', '在地', '深耕台南', '偏鄉', '社區健康', '社區營造'],
-    '全民運動健康促進': ['運動', '健身', '體適能', '健康促進', '身體活動'],
+                          '健康促進', '在地', '社區', 'SDGs', '醫療可近性'],
 }
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -128,13 +110,11 @@ def match_tags(text, rules):
 
 
 def auto_tag(title, summary, manual_keywords=None):
-    pieces = [title or '', summary or '']
-    if manual_keywords:
-        pieces.append(' '.join(manual_keywords))
-    text = ' '.join(pieces)
+    # 只匹配標題，避免 summary 裡順便提到的關鍵字被誤標
+    # 例如企業捐款新聞在 summary 順便提了「智慧醫療」，不應被標為「導入智慧科技醫療」
+    text = title or ''
     return {
         'scope': match_tags(text, SCOPE_RULES),
-        'category': match_tags(text, CATEGORY_RULES),
     }
 
 
@@ -204,7 +184,6 @@ def merge(existing, new_items):
         'description': '奇美醫院深耕計畫新聞自動收錄。每日 08:00 與 22:00（台北時間）由 GitHub Actions 自動更新。',
         'taxonomy': {
             'scope': list(SCOPE_RULES.keys()),
-            'category': list(CATEGORY_RULES.keys()),
         },
         'articles': merged,
         '_stats': {'total': len(merged), 'added_this_run': added},
@@ -222,7 +201,6 @@ def main():
 
     print('\n[3/3] 寫回 data/news.json…')
     DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    stats = merged.pop('_stats', {})
     with DATA_PATH.open('w', encoding='utf-8') as f:
         json.dump(merged, f, ensure_ascii=False, indent=2)
     print(f'\n✓ 完成：{stats.get("total", 0)} 則，新增 {stats.get("added_this_run", 0)} 則')
