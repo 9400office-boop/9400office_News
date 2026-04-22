@@ -181,6 +181,112 @@ body {
   border-color: var(--primary);
 }
 
+/* ---------- Tags Section ---------- */
+.tags-section {
+  background: var(--surface);
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 24px;
+  border: 1px solid var(--border);
+}
+
+.tags-label {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tags-label::before {
+  content: "🏷️";
+  font-size: 16px;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  background: #f0f4f8;
+  color: var(--text-soft);
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  transition: all .2s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.tag:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary-dark);
+  transform: translateY(-2px);
+}
+
+.tag.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(10, 79, 138, 0.25);
+}
+
+.tag-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tag.active .tag-count {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.tag-placeholder {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.clear-tags {
+  margin-left: auto;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--warm);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: background .2s;
+}
+
+.clear-tags:hover {
+  background: #e0931e;
+}
+
+.clear-tags.hidden {
+  display: none;
+}
+
 /* ---------- Week summary ---------- */
 .week-summary {
   padding: 10px 4px;
@@ -335,6 +441,27 @@ body {
   overflow: hidden;
 }
 
+/* 卡片內的標籤 */
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.card-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .card-cta {
   display: inline-flex;
   align-items: center;
@@ -411,6 +538,9 @@ body {
   .controls { flex-direction: column; align-items: stretch; }
   .controls-right { margin-left: 0; width: 100%; }
   #search-input { width: 100%; }
+  .tags-section { padding: 14px 16px; }
+  .tags-container { gap: 8px; }
+  .tag { padding: 6px 12px; font-size: 12px; }
   .cards-grid { grid-template-columns: 1fr; gap: 16px; }
   .brand-text h1 { font-size: 20px; }
   .subtitle { font-size: 11px; letter-spacing: 1px; }
